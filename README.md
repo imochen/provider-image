@@ -29,16 +29,32 @@
 
 克隆或下载仓库后，直接执行：
 
+Windows PowerShell:
+
 ```powershell
 python .\scripts\provider_imagegen.py inspect
+```
+
+macOS / Linux:
+
+```bash
+python3 ./scripts/provider_imagegen.py inspect
 ```
 
 ### 方式二：安装成 Codex skill
 
 在仓库目录下执行：
 
+Windows PowerShell:
+
 ```powershell
 python .\scripts\install.py
+```
+
+macOS / Linux:
+
+```bash
+python3 ./scripts/install.py
 ```
 
 它会自动安装到：
@@ -57,8 +73,16 @@ python .\scripts\install.py
 
 如果你的 Python 版本较低，再执行：
 
+Windows PowerShell:
+
 ```powershell
 python -m pip install tomli
+```
+
+macOS / Linux:
+
+```bash
+python3 -m pip install tomli
 ```
 
 ## 期望的 Codex 配置
@@ -84,11 +108,21 @@ experimental_bearer_token = "your-provider-token"
 
 查看当前会解析到哪个 provider 和鉴权来源：
 
+Windows PowerShell:
+
 ```powershell
 python .\scripts\provider_imagegen.py inspect
 ```
 
+macOS / Linux:
+
+```bash
+python3 ./scripts/provider_imagegen.py inspect
+```
+
 通过 `/v1/images/generations` 生图：
+
+Windows PowerShell:
 
 ```powershell
 python .\scripts\provider_imagegen.py generate `
@@ -96,12 +130,30 @@ python .\scripts\provider_imagegen.py generate `
   --out .\output\kitten.png
 ```
 
+macOS / Linux:
+
+```bash
+python3 ./scripts/provider_imagegen.py generate \
+  --prompt "一只可爱的小猫咪正在吃苹果，温馨治愈风格，柔和自然光，背景简洁干净" \
+  --out ./output/kitten.png
+```
+
 通过 `/v1/responses` 的 `image_generation` 工具生图：
+
+Windows PowerShell:
 
 ```powershell
 python .\scripts\provider_imagegen.py responses `
   --prompt "一只可爱的小猫咪正在吃苹果，温馨治愈风格，柔和自然光，背景简洁干净" `
   --out .\output\kitten-responses.png
+```
+
+macOS / Linux:
+
+```bash
+python3 ./scripts/provider_imagegen.py responses \
+  --prompt "一只可爱的小猫咪正在吃苹果，温馨治愈风格，柔和自然光，背景简洁干净" \
+  --out ./output/kitten-responses.png
 ```
 
 ## 安装后如何在 Codex 中触发
@@ -171,7 +223,8 @@ $provider-image
 `No module named tomli`
 
 - 你的 Python 版本较低
-- 运行 `python -m pip install tomli`
+- Windows: 运行 `python -m pip install tomli`
+- macOS / Linux: 运行 `python3 -m pip install tomli`
 
 ## 仓库结构
 

@@ -20,12 +20,22 @@ Treat common image-intent wording as a strong trigger. Examples:
 
 ## Quick Start
 
-Run the bundled script:
+Run the bundled script.
+
+Windows PowerShell:
 
 ```powershell
 python scripts/provider_imagegen.py generate `
   --prompt "A small red paper airplane on a clean light background" `
   --out output\imagegen\paper-airplane.png
+```
+
+macOS / Linux:
+
+```bash
+python3 ./scripts/provider_imagegen.py generate \
+  --prompt "A small red paper airplane on a clean light background" \
+  --out ./output/imagegen/paper-airplane.png
 ```
 
 The script automatically:
@@ -46,7 +56,9 @@ The script automatically:
 
 ## Commands
 
-Generate through `/v1/images/generations`:
+Generate through `/v1/images/generations`.
+
+Windows PowerShell:
 
 ```powershell
 python scripts/provider_imagegen.py generate `
@@ -56,7 +68,19 @@ python scripts/provider_imagegen.py generate `
   --out output\imagegen\cat.png
 ```
 
-Generate through `/v1/responses` with the `image_generation` tool:
+macOS / Linux:
+
+```bash
+python3 ./scripts/provider_imagegen.py generate \
+  --prompt "A cozy cat sleeping near a window, soft morning light" \
+  --size 1024x1024 \
+  --quality low \
+  --out ./output/imagegen/cat.png
+```
+
+Generate through `/v1/responses` with the `image_generation` tool.
+
+Windows PowerShell:
 
 ```powershell
 python scripts/provider_imagegen.py responses `
@@ -64,10 +88,26 @@ python scripts/provider_imagegen.py responses `
   --out output\imagegen\cat-responses.png
 ```
 
-Dry-run the resolved provider configuration without calling the network:
+macOS / Linux:
+
+```bash
+python3 ./scripts/provider_imagegen.py responses \
+  --prompt "A cozy cat sleeping near a window, soft morning light" \
+  --out ./output/imagegen/cat-responses.png
+```
+
+Dry-run the resolved provider configuration without calling the network.
+
+Windows PowerShell:
 
 ```powershell
 python scripts/provider_imagegen.py inspect
+```
+
+macOS / Linux:
+
+```bash
+python3 ./scripts/provider_imagegen.py inspect
 ```
 
 ## Notes
