@@ -21,7 +21,8 @@
 - 如果 `OPENAI_API_KEY` 不可用，自动回退到 `config.toml` 里的 `experimental_bearer_token`
 - 支持 `/v1/images/generations`
 - 支持 `/v1/responses` + `image_generation`
-- 默认仅依赖 Python 标准库
+- 优先使用 `httpx` 发请求
+- 如果环境里没有 `httpx`，会自动退回 Python 标准库请求路径
 
 ## 1 分钟安装
 
@@ -68,10 +69,22 @@ python3 ./scripts/install.py
 ## 依赖要求
 
 - 推荐 Python 3.11 或更高版本
-- Python 3.11+：通常不需要额外安装依赖
-- Python 3.10 及更低版本：需要安装 `tomli`
+- 推荐安装 `httpx`，这是当前更稳定、实际验证可用的请求路径
+- Python 3.10 及更低版本：除 `httpx` 外，还需要安装 `tomli`
 
-如果你的 Python 版本较低，再执行：
+推荐安装：
+
+```powershell
+python -m pip install httpx
+```
+
+macOS / Linux:
+
+```bash
+python3 -m pip install httpx
+```
+
+如果你的 Python 版本较低，再额外执行：
 
 Windows PowerShell:
 
@@ -236,6 +249,12 @@ $provider-image
 - 如果报 `403` 且包含 `error code: 1010`，这通常是 Cloudflare 或 provider 侧策略拦截，不是 skill 安装失败
 - 这时先运行 `inspect` 或 `diagnose`
 - 如果 `inspect` / `diagnose` 正常，说明 skill 已加载且配置已读到，应该联系 provider 管理员放行图片请求
+
+`urllib` 路径失败但 `httpx` 路径可用
+
+- 某些 provider 或边缘层会对不同 HTTP 客户端表现不同
+- 建议直接安装 `httpx`
+- 当前这个 skill 会优先使用 `httpx`
 
 `No module named tomli`
 

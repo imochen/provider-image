@@ -9,6 +9,7 @@ import argparse
 import base64
 import json
 import sys
+import importlib.util
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -122,6 +123,39 @@ def _extract_b64_from_responses(payload: Dict[str, Any]) -> str:
 
 
 def _request_json(base_url: str, token: str, method: str, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    if importlib.util.find_spec("httpx") is not None:
+        return _request_json_httpx(base_url, token, method, path, payload)
+    return _request_json_urllib(base_url, token, method, path, payload)
+
+
+def _request_json_httpx(
+    base_url: str, token: str, method: str, path: str, payload: Dict[str, Any]
+) -> Dict[str, Any]:
+    import httpx
+
+    url = f"{base_url}{path}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+    try:
+        with httpx.Client(timeout=180.0) as client:
+            response = client.request(method, url, headers=headers, json=payload)
+    except httpx.HTTPError as exc:
+        _die(f"Network error while calling {path}: {exc}")
+
+    if response.status_code >= 400:
+        _die(_format_http_error(path, response.status_code, response.text, dict(response.headers)))
+    try:
+        return response.json()
+    except Exception as exc:
+        _die(f"Failed to decode JSON from {path}: {exc}")
+    return {}
+
+
+def _request_json_urllib(
+    base_url: str, token: str, method: str, path: str, payload: Dict[str, Any]
+) -> Dict[str, Any]:
     url = f"{base_url}{path}"
     body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
