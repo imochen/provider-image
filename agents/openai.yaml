@@ -1,0 +1,6 @@
+interface:
+  display_name: "Provider Image"
+  short_description: "Auto-use Codex provider for image prompts"
+  default_prompt: "Use $provider-image to generate an image through the provider configured in ~/.codex/config.toml."
+policy:
+  allow_implicit_invocation: true
