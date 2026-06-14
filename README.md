@@ -120,6 +120,20 @@ macOS / Linux:
 python3 ./scripts/provider_imagegen.py inspect
 ```
 
+如果你想先做快速诊断，判断问题是本地配置还是 provider 拦截：
+
+Windows PowerShell:
+
+```powershell
+python .\scripts\provider_imagegen.py diagnose
+```
+
+macOS / Linux:
+
+```bash
+python3 ./scripts/provider_imagegen.py diagnose
+```
+
 通过 `/v1/images/generations` 生图：
 
 Windows PowerShell:
@@ -219,6 +233,9 @@ $provider-image
 - 确认 provider 真的支持这个接口
 - 确认当前 token 具备图片生成权限
 - 确认 `base_url` 指向的是 API 根路径，例如 `/v1`
+- 如果报 `403` 且包含 `error code: 1010`，这通常是 Cloudflare 或 provider 侧策略拦截，不是 skill 安装失败
+- 这时先运行 `inspect` 或 `diagnose`
+- 如果 `inspect` / `diagnose` 正常，说明 skill 已加载且配置已读到，应该联系 provider 管理员放行图片请求
 
 `No module named tomli`
 

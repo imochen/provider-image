@@ -20,6 +20,19 @@ def _die(message: str, code: int = 1) -> None:
     raise SystemExit(code)
 
 
+def _format_http_error(path: str, status: int, body: str, headers: Dict[str, str]) -> str:
+    text = (body or "").strip()
+    server = headers.get("Server", "")
+    if status == 403 and ("1010" in text or server.lower() == "cloudflare"):
+        return (
+            f"{status} from {path}: provider-side request blocked"
+            f" (Cloudflare/provider policy). Response body: {text or '<empty>'}. "
+            "The skill configuration is likely valid if `inspect` works. "
+            "Ask the provider administrator to allow image requests for this base_url, token, and client."
+        )
+    return f"{status} from {path}: {text}"
+
+
 def _load_toml(path: Path) -> Dict[str, Any]:
     try:
         import tomllib
@@ -128,7 +141,7 @@ def _request_json(base_url: str, token: str, method: str, path: str, payload: Di
             error_body = exc.read().decode("utf-8", errors="replace").strip()
         except Exception:
             error_body = str(exc)
-        _die(f"{exc.code} from {path}: {error_body}")
+        _die(_format_http_error(path, exc.code, error_body, dict(exc.headers)))
     except urllib.error.URLError as exc:
         _die(f"Network error while calling {path}: {exc}")
     try:
@@ -144,6 +157,20 @@ def _cmd_inspect(_: argparse.Namespace, resolved: Dict[str, Any]) -> int:
     print(f"auth_source={resolved['auth_source']}")
     print(f"responses_model={resolved['responses_model']}")
     print("image_model=gpt-image-2")
+    return 0
+
+
+def _cmd_diagnose(_: argparse.Namespace, resolved: Dict[str, Any]) -> int:
+    print(f"provider_name={resolved['provider_name']}")
+    print(f"base_url={resolved['base_url']}")
+    print(f"auth_source={resolved['auth_source']}")
+    print(f"responses_model={resolved['responses_model']}")
+    print("image_model=gpt-image-2")
+    print("diagnose_status=inspect_ok")
+    print("next_step=try_generate_or_responses")
+    print(
+        "if_generate_returns_403_1010=provider_side_block_not_skill_install_problem"
+    )
     return 0
 
 
@@ -200,6 +227,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     inspect_parser = subparsers.add_parser("inspect", help="Inspect resolved provider config")
     inspect_parser.set_defaults(handler=_cmd_inspect)
+
+    diagnose_parser = subparsers.add_parser(
+        "diagnose",
+        help="Explain whether failures are likely local config issues or provider-side blocking",
+    )
+    diagnose_parser.set_defaults(handler=_cmd_diagnose)
 
     gen_parser = subparsers.add_parser("generate", help="Call /v1/images/generations")
     gen_parser.add_argument("--prompt", required=True)

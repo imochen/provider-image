@@ -110,12 +110,27 @@ macOS / Linux:
 python3 ./scripts/provider_imagegen.py inspect
 ```
 
+Quick diagnosis without calling the image endpoint.
+
+Windows PowerShell:
+
+```powershell
+python scripts/provider_imagegen.py diagnose
+```
+
+macOS / Linux:
+
+```bash
+python3 ./scripts/provider_imagegen.py diagnose
+```
+
 ## Notes
 
 - Default image model is `gpt-image-2`.
 - Default Responses model comes from top-level `model` in `~/.codex/config.toml`.
 - If the user needs direct background transparency and the provider supports only legacy transparent behavior, treat that as a separate capability check.
 - If the provider returns a 4xx or 5xx, surface the status code and response body instead of silently retrying with different auth.
+- If the provider returns `403` with `error code: 1010`, treat that as provider-side or Cloudflare blocking rather than a broken local skill install when `inspect` or `diagnose` succeeds.
 
 ## Resources
 
