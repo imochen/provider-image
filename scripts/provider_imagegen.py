@@ -10,10 +10,11 @@ import base64
 import json
 import sys
 import importlib.util
+import mimetypes
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Tuple
 
 
 def _die(message: str, code: int = 1) -> None:
@@ -107,6 +108,24 @@ def _write_image(output_path: Path, image_b64: str, *, force: bool) -> None:
     print(output_path)
 
 
+def _read_image_paths(paths: List[str]) -> List[Path]:
+    if not paths:
+        _die("At least one --image path is required.")
+    resolved = []
+    for raw in paths:
+        path = Path(raw)
+        if not path.exists():
+            _die(f"Image file not found: {path}")
+        resolved.append(path)
+    return resolved
+
+
+def _data_url_for_image(path: Path) -> str:
+    mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
+
+
 def _extract_b64_from_responses(payload: Dict[str, Any]) -> str:
     for item in payload.get("output", []):
         if item.get("type") == "image_generation_call":
@@ -143,6 +162,47 @@ def _request_json_httpx(
             response = client.request(method, url, headers=headers, json=payload)
     except httpx.HTTPError as exc:
         _die(f"Network error while calling {path}: {exc}")
+
+    if response.status_code >= 400:
+        _die(_format_http_error(path, response.status_code, response.text, dict(response.headers)))
+    try:
+        return response.json()
+    except Exception as exc:
+        _die(f"Failed to decode JSON from {path}: {exc}")
+    return {}
+
+
+def _request_multipart_httpx(
+    base_url: str,
+    token: str,
+    path: str,
+    data: Dict[str, Any],
+    image_paths: List[Path],
+) -> Dict[str, Any]:
+    import httpx
+
+    url = f"{base_url}{path}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+    }
+    files = []
+    handles = []
+    try:
+        for image_path in image_paths:
+            handle = image_path.open("rb")
+            handles.append(handle)
+            mime = mimetypes.guess_type(image_path.name)[0] or "application/octet-stream"
+            files.append(("image[]", (image_path.name, handle, mime)))
+        with httpx.Client(timeout=180.0) as client:
+            response = client.post(url, headers=headers, data=data, files=files)
+    except httpx.HTTPError as exc:
+        _die(f"Network error while calling {path}: {exc}")
+    finally:
+        for handle in handles:
+            try:
+                handle.close()
+            except Exception:
+                pass
 
     if response.status_code >= 400:
         _die(_format_http_error(path, response.status_code, response.text, dict(response.headers)))
@@ -235,10 +295,54 @@ def _cmd_generate(args: argparse.Namespace, resolved: Dict[str, Any]) -> int:
     return 0
 
 
+def _cmd_reference(args: argparse.Namespace, resolved: Dict[str, Any]) -> int:
+    if importlib.util.find_spec("httpx") is None:
+        _die("Reference-image mode requires `httpx`. Run `python -m pip install httpx`.")
+
+    image_paths = _read_image_paths(args.image)
+    form = {
+        "model": args.model,
+        "prompt": args.prompt,
+        "size": args.size,
+        "quality": args.quality,
+    }
+    if args.output_format:
+        form["output_format"] = args.output_format
+
+    data = _request_multipart_httpx(
+        resolved["base_url"],
+        resolved["token"],
+        "/images/edits",
+        form,
+        image_paths,
+    )
+    try:
+        image_b64 = data["data"][0]["b64_json"]
+    except Exception as exc:
+        _die(f"Unexpected /images/edits response shape: {exc}")
+    _write_image(Path(args.out), image_b64, force=args.force)
+    return 0
+
+
 def _cmd_responses(args: argparse.Namespace, resolved: Dict[str, Any]) -> int:
+    content: List[Dict[str, Any]] = []
+    if args.image:
+        for image_path in _read_image_paths(args.image):
+            content.append(
+                {
+                    "type": "input_image",
+                    "image_url": _data_url_for_image(image_path),
+                }
+            )
+    content.append(
+        {
+            "type": "input_text",
+            "text": args.prompt,
+        }
+    )
     payload = {
         "model": args.responses_model or resolved["responses_model"],
-        "input": args.prompt,
+        "input": [{"role": "user", "content": content}],
         "tools": [{"type": "image_generation"}],
     }
     data = _request_json(
@@ -279,9 +383,24 @@ def _build_parser() -> argparse.ArgumentParser:
     gen_parser.add_argument("--force", action="store_true")
     gen_parser.set_defaults(handler=_cmd_generate)
 
+    ref_parser = subparsers.add_parser(
+        "reference",
+        help="Call /v1/images/edits with one or more reference images",
+    )
+    ref_parser.add_argument("--image", action="append", required=True)
+    ref_parser.add_argument("--prompt", required=True)
+    ref_parser.add_argument("--out", required=True)
+    ref_parser.add_argument("--model", default="gpt-image-2")
+    ref_parser.add_argument("--size", default="1024x1024")
+    ref_parser.add_argument("--quality", default="low")
+    ref_parser.add_argument("--output-format")
+    ref_parser.add_argument("--force", action="store_true")
+    ref_parser.set_defaults(handler=_cmd_reference)
+
     resp_parser = subparsers.add_parser(
         "responses", help="Call /v1/responses with the image_generation tool"
     )
+    resp_parser.add_argument("--image", action="append")
     resp_parser.add_argument("--prompt", required=True)
     resp_parser.add_argument("--out", required=True)
     resp_parser.add_argument("--responses-model")

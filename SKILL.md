@@ -52,7 +52,8 @@ The script automatically:
 2. Use `scripts/provider_imagegen.py`.
 3. Prefer `generate` for new images.
 4. Prefer `responses` mode only when the user explicitly wants the Responses image tool path.
-5. Save project-bound outputs inside the workspace and report the final file path.
+5. Use `reference` mode when the user provides one or more reference images and wants a new image guided by them.
+6. Save project-bound outputs inside the workspace and report the final file path.
 
 ## Commands
 
@@ -96,6 +97,26 @@ python3 ./scripts/provider_imagegen.py responses \
   --out ./output/imagegen/cat-responses.png
 ```
 
+Generate through `/v1/images/edits` with one or more reference images.
+
+Windows PowerShell:
+
+```powershell
+python scripts/provider_imagegen.py reference `
+  --image output\fixed-kitten.png `
+  --prompt "Use the cat in this image as the reference and generate a warm illustration of it eating an apple" `
+  --out output\imagegen\cat-reference.png
+```
+
+macOS / Linux:
+
+```bash
+python3 ./scripts/provider_imagegen.py reference \
+  --image ./output/fixed-kitten.png \
+  --prompt "Use the cat in this image as the reference and generate a warm illustration of it eating an apple" \
+  --out ./output/imagegen/cat-reference.png
+```
+
 Dry-run the resolved provider configuration without calling the network.
 
 Windows PowerShell:
@@ -128,6 +149,7 @@ python3 ./scripts/provider_imagegen.py diagnose
 
 - Default image model is `gpt-image-2`.
 - Default Responses model comes from top-level `model` in `~/.codex/config.toml`.
+- `reference` mode requires `httpx`.
 - If the user needs direct background transparency and the provider supports only legacy transparent behavior, treat that as a separate capability check.
 - If the provider returns a 4xx or 5xx, surface the status code and response body instead of silently retrying with different auth.
 - If the provider returns `403` with `error code: 1010`, treat that as provider-side or Cloudflare blocking rather than a broken local skill install when `inspect` or `diagnose` succeeds.

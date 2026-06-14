@@ -183,6 +183,66 @@ python3 ./scripts/provider_imagegen.py responses \
   --out ./output/kitten-responses.png
 ```
 
+## 参考图支持
+
+当前版本已经支持参考图输入，有两种方式：
+
+### 方式一：`reference` 子命令
+
+这条路会走 `/v1/images/edits`，适合“参考这张图生成一张新的图”。
+
+Windows PowerShell:
+
+```powershell
+python .\scripts\provider_imagegen.py reference `
+  --image .\output\fixed-kitten.png `
+  --prompt "参考这张图的小猫主体和整体风格，让它改成正在吃一个红苹果，画面更温馨治愈" `
+  --out .\output\kitten-reference.png
+```
+
+macOS / Linux:
+
+```bash
+python3 ./scripts/provider_imagegen.py reference \
+  --image ./output/fixed-kitten.png \
+  --prompt "参考这张图的小猫主体和整体风格，让它改成正在吃一个红苹果，画面更温馨治愈" \
+  --out ./output/kitten-reference.png
+```
+
+### 方式二：`responses` 子命令配合 `--image`
+
+这条路会把参考图作为 `input_image` 一起发给 `/v1/responses`。
+
+Windows PowerShell:
+
+```powershell
+python .\scripts\provider_imagegen.py responses `
+  --image .\output\fixed-kitten.png `
+  --prompt "参考这张图，生成一张小猫正在吃苹果的温馨插画" `
+  --out .\output\kitten-reference-responses.png
+```
+
+macOS / Linux:
+
+```bash
+python3 ./scripts/provider_imagegen.py responses \
+  --image ./output/fixed-kitten.png \
+  --prompt "参考这张图，生成一张小猫正在吃苹果的温馨插画" \
+  --out ./output/kitten-reference-responses.png
+```
+
+### 多张参考图
+
+支持重复传 `--image`：
+
+```powershell
+python .\scripts\provider_imagegen.py reference `
+  --image .\ref1.png `
+  --image .\ref2.png `
+  --prompt "参考这两张图的构图和风格，生成一张新的海报图" `
+  --out .\output\poster.png
+```
+
 ## 安装后如何在 Codex 中触发
 
 最稳妥的方式是显式写出 skill 名：
