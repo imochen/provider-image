@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/provider-image.svg" width="96" height="96" alt="provider-image logo">
+  <img src="assets/provider-image.svg" width="96" height="96" alt="Provider Image logo">
 </p>
 
-<h1 align="center">provider-image</h1>
+<h1 align="center">Provider Image</h1>
 
 <p align="center">
   让 Codex 通过你已经配置好的 OpenAI-compatible 自定义 Provider 生成图片。
@@ -18,7 +18,7 @@
   <img alt="Codex Skill" src="https://img.shields.io/badge/Codex-skill-7c3aed.svg">
 </p>
 
-`provider-image` 是一个给 Codex 使用的本地 skill 和命令行脚本。它会读取本机已有的 Codex provider 配置，把图片生成请求发送到你当前选中的 OpenAI-compatible provider。
+`Provider Image` 是一个给 Codex 使用的本地 skill 和命令行脚本。它会读取本机已有的 Codex provider 配置，把图片生成请求发送到你当前选中的 OpenAI-compatible provider。
 
 适合你已经明确要使用自定义 Provider 生成图片的场景。如果你希望使用 Codex 默认内置图片能力，或者不确定当前 provider 是否可信，请不要启用这个工具；先运行 `inspect` 确认配置。
 
@@ -34,6 +34,12 @@
 - 可作为普通脚本运行，也可安装成 Codex skill
 
 ### 安装
+
+最省事的方式：复制下面这句话交给 Codex，让它自动安装本 skill：
+
+```text
+请从 https://github.com/imochen/provider-image 安装 Provider Image 这个 Codex skill，安装到 ~/.codex/skills/provider-image；安装后运行 inspect 检查配置，但不要替我发起图片生成请求。
+```
 
 克隆仓库后，可以直接作为脚本使用：
 
@@ -155,6 +161,34 @@ python3 ./scripts/provider_imagegen.py responses \
   --image ./output/fixed-kitten.png \
   --prompt "参考这张图，生成一张小猫正在吃苹果的温馨插画" \
   --out ./output/kitten-reference-responses.png
+```
+
+### 参考图提示词怎么写
+
+使用参考图时，提示词最好同时说明“哪些要保留”和“哪些要改变”。不要只写“参考这张图生成一张图”，否则 provider 可能不知道你重视的是主体、构图、风格、配色还是细节。
+
+推荐结构：
+
+```text
+参考这张图的{要保留的内容}，生成{新画面}。请保留{主体/构图/风格/配色/材质/表情}，将{需要改变的部分}改成{目标变化}。整体效果：{风格、氛围、用途、画幅}。
+```
+
+常用写法：
+
+```text
+参考这张图的小猫主体、柔和插画风格和温暖配色，生成一张小猫正在吃红苹果的图片。请保留小猫的外形特征和治愈氛围，把动作改成双爪抱着苹果，背景保持简洁干净，正方形构图。
+```
+
+如果你更在意风格而不是主体：
+
+```text
+参考这张图的光影、笔触和色彩氛围，不需要保留原图主体。生成一张咖啡杯放在窗边的温暖插画，画面干净，柔和自然光，适合作为博客封面。
+```
+
+如果你要在 Codex 中调用，可以这样写：
+
+```text
+使用 $provider-image，参考 output/reference.png，生成一张图：参考图里的主体外形和整体风格要保留，把场景改成夜晚书桌前，保存到 output/imagegen/result.png
 ```
 
 Windows PowerShell 中可使用反引号换行：

@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/provider-image.svg" width="96" height="96" alt="provider-image logo">
+  <img src="assets/provider-image.svg" width="96" height="96" alt="Provider Image logo">
 </p>
 
-<h1 align="center">provider-image</h1>
+<h1 align="center">Provider Image</h1>
 
 <p align="center">
   Generate images in Codex through your configured OpenAI-compatible custom provider.
@@ -18,7 +18,7 @@
   <img alt="Codex Skill" src="https://img.shields.io/badge/Codex-skill-7c3aed.svg">
 </p>
 
-`provider-image` is a local Codex skill and CLI script for generating images through the OpenAI-compatible provider already configured in your Codex environment.
+`Provider Image` is a local Codex skill and CLI script for generating images through the OpenAI-compatible provider already configured in your Codex environment.
 
 Use it only when you intentionally want image requests to go through your custom provider. If you want Codex's default built-in image path, or if you are unsure whether the active provider is trusted, do not enable this tool. Run `inspect` first.
 
@@ -34,6 +34,12 @@ Use it only when you intentionally want image requests to go through your custom
 - Works as both a standalone script and a Codex skill
 
 ## Install
+
+Easiest path: copy this sentence into Codex and let Codex install the skill:
+
+```text
+Please install the Provider Image Codex skill from https://github.com/imochen/provider-image into ~/.codex/skills/provider-image; after installation, run inspect to check the configuration, but do not start image generation for me.
+```
 
 Run directly:
 
@@ -155,6 +161,34 @@ python3 ./scripts/provider_imagegen.py responses \
   --image ./output/fixed-kitten.png \
   --prompt "Use this image as reference and generate a warm cat illustration" \
   --out ./output/cat-reference-responses.png
+```
+
+## Writing Prompts For Reference Images
+
+When using reference images, say both what should stay the same and what should change. Avoid prompts like "use this image as reference" by itself; the provider may not know whether you care about the subject, composition, style, colors, or fine details.
+
+Recommended structure:
+
+```text
+Use this image's {things to preserve} as reference, and generate {new scene}. Keep {subject/composition/style/colors/materials/expression}, change {parts to modify} into {target change}. Overall result: {style, mood, use case, aspect ratio}.
+```
+
+Common example:
+
+```text
+Use the cat subject, soft illustration style, and warm color palette from this image as reference. Generate an image of the cat eating a red apple. Keep the cat's visual identity and cozy mood, change the pose so it is holding the apple with both paws, keep the background simple and clean, square composition.
+```
+
+If you care more about style than the original subject:
+
+```text
+Use this image's lighting, brushwork, and color mood as reference. Do not preserve the original subject. Generate a warm illustration of a coffee cup beside a window, clean composition, soft natural light, suitable for a blog cover.
+```
+
+In Codex, you can write:
+
+```text
+Use $provider-image with output/reference.png as the reference image. Generate an image that preserves the subject shape and overall style, changes the scene to a nighttime desk setup, and saves it to output/imagegen/result.png.
 ```
 
 ## Use In Codex
