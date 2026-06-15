@@ -31,6 +31,7 @@
 - 支持 `/v1/images/edits` 参考图模式
 - 支持 `/v1/responses` + `image_generation`
 - 优先使用 `httpx`，缺失时普通 JSON 请求会回退到 Python 标准库
+- 支持 `curl --http1.1` fallback，绕过部分 provider 的 Cloudflare/WAF Python 客户端拦截
 - 可作为普通脚本运行，也可安装成 Codex skill
 
 ### 安装
@@ -137,6 +138,26 @@ python3 ./scripts/provider_imagegen.py generate \
   --out ./output/kitten.png
 ```
 
+默认 `--transport auto` 会先走 Python 客户端，也就是 `httpx` 或 `urllib`。如果 provider/WAF 返回 `403`、Cloudflare、`1010` 或 `Your request was blocked`，会自动重试 `curl --http1.1` 和浏览器风格请求头。
+
+也可以手动指定 transport：
+
+```bash
+python3 ./scripts/provider_imagegen.py generate \
+  --transport curl \
+  --prompt "一只可爱的小猫咪正在吃苹果，温馨治愈风格" \
+  --out ./output/kitten-curl.png
+```
+
+如果要完全保留旧行为，不做 fallback：
+
+```bash
+python3 ./scripts/provider_imagegen.py generate \
+  --transport python \
+  --prompt "一只可爱的小猫咪正在吃苹果，温馨治愈风格" \
+  --out ./output/kitten-python.png
+```
+
 通过 `/v1/responses` 的 `image_generation` 工具生成图片：
 
 ```bash
@@ -225,7 +246,11 @@ python .\scripts\provider_imagegen.py generate `
 
 确认 provider 支持对应接口、当前 token 具备图片生成权限，并且 `base_url` 指向 API 根路径，例如 `/v1`。
 
-如果报 `403` 且包含 `error code: 1010`，通常是 Cloudflare 或 provider 侧策略拦截，不是 skill 安装失败。先运行 `inspect` 或 `diagnose`；如果本地配置正常，应联系 provider 管理员放行图片请求。
+如果报 `403` 且包含 `error code: 1010`，通常是 Cloudflare 或 provider 侧策略拦截，不是 skill 安装失败。默认 `--transport auto` 会自动使用 curl fallback 重试。若 curl 也失败，先运行 `inspect` 或 `diagnose`；如果本地配置正常，应联系 provider 管理员放行图片请求。
+
+#### `Python transport was blocked by provider/WAF; retrying with curl transport...`
+
+这是预期 fallback。说明 Python HTTP 客户端被 provider/WAF 拦截，工具正在改用 `curl --http1.1` 和浏览器风格请求头重试。可用 `--transport curl` 直接走 curl，或用 `--transport python` 禁用 fallback 以便排查旧路径。
 
 #### `urllib` 路径失败但 `httpx` 路径可用
 

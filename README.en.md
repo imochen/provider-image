@@ -31,6 +31,7 @@ Use it only when you intentionally want image requests to go through your custom
 - Supports `/v1/images/edits` for reference-image workflows
 - Supports `/v1/responses` with `image_generation`
 - Prefers `httpx`; plain JSON requests can fall back to Python's standard library
+- Supports a `curl --http1.1` fallback for providers whose Cloudflare/WAF rules block Python clients
 - Works as both a standalone script and a Codex skill
 
 ## Install
@@ -137,6 +138,26 @@ python3 ./scripts/provider_imagegen.py generate \
   --out ./output/cat.png
 ```
 
+By default, `--transport auto` tries the Python client first, meaning `httpx` or `urllib`. If the provider/WAF returns `403`, Cloudflare, `1010`, or `Your request was blocked`, it retries with `curl --http1.1` and browser-like headers.
+
+You can also choose the transport explicitly:
+
+```bash
+python3 ./scripts/provider_imagegen.py generate \
+  --transport curl \
+  --prompt "A cozy cat sleeping near a window, soft morning light" \
+  --out ./output/cat-curl.png
+```
+
+To preserve the old behavior and disable fallback:
+
+```bash
+python3 ./scripts/provider_imagegen.py generate \
+  --transport python \
+  --prompt "A cozy cat sleeping near a window, soft morning light" \
+  --out ./output/cat-python.png
+```
+
 Generate through `/v1/responses` with `image_generation`:
 
 ```bash
@@ -211,7 +232,11 @@ Check whether `~/.codex/auth.json` contains a usable `OPENAI_API_KEY`. If not, s
 
 Confirm that the provider supports the endpoint, your token has image-generation permission, and `base_url` points to the API root, such as `/v1`.
 
-If the response is `403` and contains `error code: 1010`, it is usually Cloudflare or provider-side policy blocking, not a broken skill install. Run `inspect` or `diagnose`; if local config is correct, ask the provider administrator to allow image requests.
+If the response is `403` and contains `error code: 1010`, it is usually Cloudflare or provider-side policy blocking, not a broken skill install. The default `--transport auto` retries with the curl fallback. If curl also fails, run `inspect` or `diagnose`; if local config is correct, ask the provider administrator to allow image requests.
+
+### `Python transport was blocked by provider/WAF; retrying with curl transport...`
+
+This is the expected fallback path. It means the Python HTTP client was blocked by the provider/WAF, so the tool is retrying with `curl --http1.1` and browser-like headers. Use `--transport curl` to go directly through curl, or `--transport python` to disable fallback while debugging the old path.
 
 ### `urllib` fails but `httpx` works
 
