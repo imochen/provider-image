@@ -1,112 +1,92 @@
-# provider-image
+<p align="center">
+  <img src="assets/provider-image.svg" width="96" height="96" alt="provider-image logo">
+</p>
 
-`provider-image` 是一个给 Codex 用的本地 skill，用来通过你已经配置好的自定义 provider 生图。
+<h1 align="center">provider-image</h1>
 
-它会自动复用：
+<p align="center">
+  让 Codex 通过你已经配置好的 OpenAI-compatible 自定义 Provider 生成图片。
+</p>
 
-- `~/.codex/config.toml`
-- `~/.codex/auth.json`
+<p align="center">
+  中文 · <a href="README.en.md">English</a>
+</p>
 
-适合这些情况：
+<p align="center">
+  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0f766e.svg">
+  <img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-2563eb.svg">
+  <img alt="Codex Skill" src="https://img.shields.io/badge/Codex-skill-7c3aed.svg">
+</p>
 
-- 你已经在 Codex 里配置了 OpenAI 兼容 provider
-- 这个 provider 支持图片生成
-- 你希望生成图片时直接复用 Codex 现有配置，而不是另外单独维护一套 API 参数
+`provider-image` 是一个给 Codex 使用的本地 skill 和命令行脚本。它会读取本机已有的 Codex provider 配置，把图片生成请求发送到你当前选中的 OpenAI-compatible provider。
 
-## 特性
+适合你已经明确要使用自定义 Provider 生成图片的场景。如果你希望使用 Codex 默认内置图片能力，或者不确定当前 provider 是否可信，请不要启用这个工具；先运行 `inspect` 确认配置。
 
-- 自动读取当前 `model_provider`
-- 自动读取对应 provider 的 `base_url`
-- 优先使用 `~/.codex/auth.json` 里的 `OPENAI_API_KEY`
-- 如果 `OPENAI_API_KEY` 不可用，自动回退到 `config.toml` 里的 `experimental_bearer_token`
+### 特性
+
+- 自动读取 `~/.codex/config.toml` 中的 `model_provider`
+- 自动使用对应 provider 的 `base_url`
+- 复用 Codex 本地鉴权配置
 - 支持 `/v1/images/generations`
+- 支持 `/v1/images/edits` 参考图模式
 - 支持 `/v1/responses` + `image_generation`
-- 优先使用 `httpx` 发请求
-- 如果环境里没有 `httpx`，会自动退回 Python 标准库请求路径
+- 优先使用 `httpx`，缺失时普通 JSON 请求会回退到 Python 标准库
+- 可作为普通脚本运行，也可安装成 Codex skill
 
-## 1 分钟安装
+### 安装
 
-### 方式一：直接作为本地脚本使用
-
-克隆或下载仓库后，直接执行：
-
-Windows PowerShell:
-
-```powershell
-python .\scripts\provider_imagegen.py inspect
-```
-
-macOS / Linux:
+克隆仓库后，可以直接作为脚本使用：
 
 ```bash
 python3 ./scripts/provider_imagegen.py inspect
 ```
 
-### 方式二：安装成 Codex skill
-
-在仓库目录下执行：
-
-Windows PowerShell:
-
-```powershell
-python .\scripts\install.py
-```
-
-macOS / Linux:
+也可以安装成 Codex skill：
 
 ```bash
 python3 ./scripts/install.py
 ```
 
-它会自动安装到：
+安装后会复制到：
 
 ```text
 ~/.codex/skills/provider-image
 ```
 
-安装完成后重启 Codex。
+然后重启 Codex。
 
-## 依赖要求
-
-- 推荐 Python 3.11 或更高版本
-- 推荐安装 `httpx`，这是当前更稳定、实际验证可用的请求路径
-- Python 3.10 及更低版本：除 `httpx` 外，还需要安装 `tomli`
-
-推荐安装：
+Windows PowerShell 对应命令：
 
 ```powershell
-python -m pip install httpx
+python .\scripts\provider_imagegen.py inspect
+python .\scripts\install.py
 ```
 
-macOS / Linux:
+### 依赖
+
+推荐使用 Python 3.11 或更高版本：
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+如果不使用 `requirements.txt`，至少建议安装：
 
 ```bash
 python3 -m pip install httpx
 ```
 
-如果你的 Python 版本较低，再额外执行：
+Python 3.10 及更低版本还需要 `tomli`。
 
-Windows PowerShell:
-
-```powershell
-python -m pip install tomli
-```
-
-macOS / Linux:
-
-```bash
-python3 -m pip install tomli
-```
-
-## 期望的 Codex 配置
+### Codex 配置
 
 你的 `~/.codex/config.toml` 至少应包含：
 
 ```toml
-model_provider = "newapi"
+model_provider = "custom"
 model = "gpt-5.4"
 
-[model_providers.newapi]
+[model_providers.custom]
 base_url = "https://your-provider.example/v1"
 wire_api = "responses"
 ```
@@ -117,47 +97,33 @@ wire_api = "responses"
 experimental_bearer_token = "your-provider-token"
 ```
 
-## 命令行用法
+### 安全提示
 
-查看当前会解析到哪个 provider 和鉴权来源：
+这个工具会把图片请求发送到当前 Codex 配置解析出的 `base_url`。请只在你确认要使用该自定义 Provider 时使用它。
 
-Windows PowerShell:
-
-```powershell
-python .\scripts\provider_imagegen.py inspect
-```
-
-macOS / Linux:
+运行生成命令前，建议先检查：
 
 ```bash
 python3 ./scripts/provider_imagegen.py inspect
 ```
 
-如果你想先做快速诊断，判断问题是本地配置还是 provider 拦截：
+确认输出里的 `provider_name`、`base_url` 和 `auth_source` 都符合预期后，再继续生成图片。
 
-Windows PowerShell:
+### 命令行用法
 
-```powershell
-python .\scripts\provider_imagegen.py diagnose
+检查当前解析到的 provider：
+
+```bash
+python3 ./scripts/provider_imagegen.py inspect
 ```
 
-macOS / Linux:
+快速诊断本地配置和常见 provider 拦截问题：
 
 ```bash
 python3 ./scripts/provider_imagegen.py diagnose
 ```
 
-通过 `/v1/images/generations` 生图：
-
-Windows PowerShell:
-
-```powershell
-python .\scripts\provider_imagegen.py generate `
-  --prompt "一只可爱的小猫咪正在吃苹果，温馨治愈风格，柔和自然光，背景简洁干净" `
-  --out .\output\kitten.png
-```
-
-macOS / Linux:
+通过 `/v1/images/generations` 生成图片：
 
 ```bash
 python3 ./scripts/provider_imagegen.py generate \
@@ -165,17 +131,7 @@ python3 ./scripts/provider_imagegen.py generate \
   --out ./output/kitten.png
 ```
 
-通过 `/v1/responses` 的 `image_generation` 工具生图：
-
-Windows PowerShell:
-
-```powershell
-python .\scripts\provider_imagegen.py responses `
-  --prompt "一只可爱的小猫咪正在吃苹果，温馨治愈风格，柔和自然光，背景简洁干净" `
-  --out .\output\kitten-responses.png
-```
-
-macOS / Linux:
+通过 `/v1/responses` 的 `image_generation` 工具生成图片：
 
 ```bash
 python3 ./scripts/provider_imagegen.py responses \
@@ -183,24 +139,7 @@ python3 ./scripts/provider_imagegen.py responses \
   --out ./output/kitten-responses.png
 ```
 
-## 参考图支持
-
-当前版本已经支持参考图输入，有两种方式：
-
-### 方式一：`reference` 子命令
-
-这条路会走 `/v1/images/edits`，适合“参考这张图生成一张新的图”。
-
-Windows PowerShell:
-
-```powershell
-python .\scripts\provider_imagegen.py reference `
-  --image .\output\fixed-kitten.png `
-  --prompt "参考这张图的小猫主体和整体风格，让它改成正在吃一个红苹果，画面更温馨治愈" `
-  --out .\output\kitten-reference.png
-```
-
-macOS / Linux:
+使用参考图，通过 `/v1/images/edits` 生成新图：
 
 ```bash
 python3 ./scripts/provider_imagegen.py reference \
@@ -209,20 +148,7 @@ python3 ./scripts/provider_imagegen.py reference \
   --out ./output/kitten-reference.png
 ```
 
-### 方式二：`responses` 子命令配合 `--image`
-
-这条路会把参考图作为 `input_image` 一起发给 `/v1/responses`。
-
-Windows PowerShell:
-
-```powershell
-python .\scripts\provider_imagegen.py responses `
-  --image .\output\fixed-kitten.png `
-  --prompt "参考这张图，生成一张小猫正在吃苹果的温馨插画" `
-  --out .\output\kitten-reference-responses.png
-```
-
-macOS / Linux:
+在 `responses` 模式中传入参考图：
 
 ```bash
 python3 ./scripts/provider_imagegen.py responses \
@@ -231,19 +157,15 @@ python3 ./scripts/provider_imagegen.py responses \
   --out ./output/kitten-reference-responses.png
 ```
 
-### 多张参考图
-
-支持重复传 `--image`：
+Windows PowerShell 中可使用反引号换行：
 
 ```powershell
-python .\scripts\provider_imagegen.py reference `
-  --image .\ref1.png `
-  --image .\ref2.png `
-  --prompt "参考这两张图的构图和风格，生成一张新的海报图" `
-  --out .\output\poster.png
+python .\scripts\provider_imagegen.py generate `
+  --prompt "A warm tea cup illustration" `
+  --out .\output\tea.png
 ```
 
-## 安装后如何在 Codex 中触发
+### 在 Codex 中触发
 
 最稳妥的方式是显式写出 skill 名：
 
@@ -251,86 +173,57 @@ python .\scripts\provider_imagegen.py reference `
 使用 $provider-image 生成一张图：一只可爱的小猫咪正在吃苹果，保存到 output/imagegen/kitten.png
 ```
 
-如果你想明确要求走 `/responses` 的图片工具链路：
+如果要明确走 Responses 图片工具链路：
 
 ```text
 使用 $provider-image，通过 Responses 的 image_generation 工具生成一张图：一只可爱的小猫咪正在吃苹果，保存到 output/imagegen/kitten-responses.png
 ```
 
-如果你想先检查当前 provider 再生成图片：
+自动触发不是强保证机制。想稳定触发，建议始终显式写出 `$provider-image`。
 
-```text
-使用 $provider-image，先检查当前 Codex provider 配置，然后生成一张温馨治愈风格的小猫插画
+### 常见问题
+
+#### `Error: No bearer token found`
+
+检查 `~/.codex/auth.json` 是否包含可用的 `OPENAI_API_KEY`。如果没有，请在 `~/.codex/config.toml` 中设置 `experimental_bearer_token`。
+
+#### `4xx from /images/generations` 或 `4xx from /responses`
+
+确认 provider 支持对应接口、当前 token 具备图片生成权限，并且 `base_url` 指向 API 根路径，例如 `/v1`。
+
+如果报 `403` 且包含 `error code: 1010`，通常是 Cloudflare 或 provider 侧策略拦截，不是 skill 安装失败。先运行 `inspect` 或 `diagnose`；如果本地配置正常，应联系 provider 管理员放行图片请求。
+
+#### `urllib` 路径失败但 `httpx` 路径可用
+
+某些 provider 或边缘层会对不同 HTTP 客户端表现不同。建议安装并使用 `httpx`。
+
+### 开发
+
+运行基础检查：
+
+```bash
+python3 -m py_compile scripts/provider_imagegen.py scripts/install.py
+python3 -m unittest discover -s tests
 ```
 
-## 自动触发说明
-
-这个 skill 已经针对常见图片意图做了触发优化，下面这类表达更容易命中：
-
-- `生成一张图`
-- `帮我画一张插画`
-- `做一张海报`
-- `生成一个头像`
-- `create an image`
-- `generate a poster`
-
-但自动触发不是强保证机制。想稳定触发，建议始终显式写出：
-
-```text
-$provider-image
-```
-
-## 常用提示词模板
-
-最推荐的写法：
-
-```text
-使用 $provider-image，生成一张图：{你的提示词}，保存到 {你的输出路径}
-```
-
-例如：
-
-```text
-使用 $provider-image，生成一张图：一只可爱的小猫咪正在吃苹果，温馨治愈风格，柔和自然光，细节丰富，背景干净，保存到 output/imagegen/cat-apple.png
-```
-
-## 常见问题
-
-`Error: No bearer token found`
-
-- 检查 `~/.codex/auth.json`
-- 如果 `OPENAI_API_KEY` 是 `null` 或不存在，请在 `~/.codex/config.toml` 中设置 `experimental_bearer_token`
-
-`4xx from /images/generations` 或 `4xx from /responses`
-
-- 确认 provider 真的支持这个接口
-- 确认当前 token 具备图片生成权限
-- 确认 `base_url` 指向的是 API 根路径，例如 `/v1`
-- 如果报 `403` 且包含 `error code: 1010`，这通常是 Cloudflare 或 provider 侧策略拦截，不是 skill 安装失败
-- 这时先运行 `inspect` 或 `diagnose`
-- 如果 `inspect` / `diagnose` 正常，说明 skill 已加载且配置已读到，应该联系 provider 管理员放行图片请求
-
-`urllib` 路径失败但 `httpx` 路径可用
-
-- 某些 provider 或边缘层会对不同 HTTP 客户端表现不同
-- 建议直接安装 `httpx`
-- 当前这个 skill 会优先使用 `httpx`
-
-`No module named tomli`
-
-- 你的 Python 版本较低
-- Windows: 运行 `python -m pip install tomli`
-- macOS / Linux: 运行 `python3 -m pip install tomli`
-
-## 仓库结构
+### 仓库结构
 
 ```text
 provider-image/
 ├── agents/
+├── assets/
 ├── references/
 ├── scripts/
 │   ├── install.py
 │   └── provider_imagegen.py
+├── tests/
+├── CONTRIBUTING.md
+├── LICENSE
+├── README.en.md
 ├── README.md
 └── SKILL.md
 ```
+
+### License
+
+MIT License.
