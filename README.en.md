@@ -18,49 +18,42 @@
   <img alt="Codex Skill" src="https://img.shields.io/badge/Codex-skill-7c3aed.svg">
 </p>
 
-`Provider Image` is a local Codex skill and CLI script for generating images through the OpenAI-compatible provider already configured in your Codex environment.
+`Provider Image` is a Codex skill and CLI script. It reads your local `~/.codex/config.toml` provider settings and sends image-generation requests to that OpenAI-compatible provider.
 
-Use it only when you intentionally want image requests to go through your custom provider. If you want Codex's default built-in image path, or if you are unsure whether the active provider is trusted, do not enable this tool. Run `inspect` first.
+Use this tool only when you intentionally want image requests to go through your custom provider. If you want Codex's default built-in image path, or if you are unsure whether the active provider is trusted, do not enable it yet.
 
-## Features
+## What It Supports
 
-- Reads the active `model_provider` from `~/.codex/config.toml`
-- Uses the selected provider's `base_url`
-- Reuses local Codex authentication settings
+- Resolves Codex's active `model_provider`, `base_url`, and auth settings
 - Supports `/v1/images/generations`
 - Supports `/v1/images/edits` for reference-image workflows
 - Supports `/v1/responses` with `image_generation`
-- Prefers `curl --http1.1` with browser-like headers for better provider/WAF compatibility
-- Supports Python transport fallback: JSON uses `httpx` or `urllib`, reference-image mode uses `httpx`
-- Works as both a standalone script and a Codex skill
+- Uses `curl --http1.1` with browser-like headers first for better Cloudflare/WAF compatibility
+- Falls back to Python transport: JSON uses `httpx` or `urllib`, reference-image mode uses `httpx`
+- Works as both a Codex skill and a standalone CLI script
 
-## Install
+## Quick Install
 
-Easiest path: copy this sentence into Codex and let Codex install the skill:
+Easiest path: copy this sentence into Codex:
 
 ```text
 Please install the Provider Image Codex skill from https://github.com/imochen/provider-image into ~/.codex/skills/provider-image; after installation, run inspect to check the configuration, but do not start image generation for me.
 ```
 
-Run directly:
+Manual install:
+
+```bash
+git clone https://github.com/imochen/provider-image.git
+cd provider-image
+python3 -m pip install -r requirements.txt
+python3 ./scripts/install.py
+```
+
+Restart Codex after installation. You can also skip skill installation and run the script directly:
 
 ```bash
 python3 ./scripts/provider_imagegen.py inspect
 ```
-
-Install as a Codex skill:
-
-```bash
-python3 ./scripts/install.py
-```
-
-The installer copies the skill to:
-
-```text
-~/.codex/skills/provider-image
-```
-
-Restart Codex after installation.
 
 Windows PowerShell:
 
@@ -69,25 +62,11 @@ python .\scripts\provider_imagegen.py inspect
 python .\scripts\install.py
 ```
 
-## Dependencies
+Python 3.11+ is recommended. Python 3.10 and older also need `tomli`.
 
-Python 3.11+ is recommended:
+## Codex Configuration
 
-```bash
-python3 -m pip install -r requirements.txt
-```
-
-If you want to use Python transport or run development tests, install at least:
-
-```bash
-python3 -m pip install httpx
-```
-
-Python 3.10 and older also need `tomli`.
-
-## Configuration
-
-Your `~/.codex/config.toml` should include an OpenAI-compatible provider:
+Your `~/.codex/config.toml` should contain an OpenAI-compatible provider:
 
 ```toml
 model_provider = "custom"
@@ -98,118 +77,90 @@ base_url = "https://your-provider.example/v1"
 wire_api = "responses"
 ```
 
-If `~/.codex/auth.json` does not contain a usable `OPENAI_API_KEY`, provide:
+If `~/.codex/auth.json` does not contain a usable `OPENAI_API_KEY`, provide a token in `config.toml`:
 
 ```toml
 experimental_bearer_token = "your-provider-token"
 ```
 
-## Safety
-
-This tool sends image requests to the `base_url` resolved from your local Codex configuration. Use it only after confirming that the provider and token are the ones you intend to use.
-
-Check first:
+Before generating, inspect the resolved provider:
 
 ```bash
 python3 ./scripts/provider_imagegen.py inspect
 ```
 
-Confirm that `provider_name`, `base_url`, and `auth_source` are all expected before generating images.
+Confirm that `provider_name`, `base_url`, and `auth_source` are all expected.
 
-## Usage
+## Common Commands
 
-Inspect the active provider:
-
-```bash
-python3 ./scripts/provider_imagegen.py inspect
-```
-
-Run a quick local/provider diagnosis:
-
-```bash
-python3 ./scripts/provider_imagegen.py diagnose
-```
-
-Generate through `/v1/images/generations`:
+### Text To Image
 
 ```bash
 python3 ./scripts/provider_imagegen.py generate \
-  --prompt "A cozy cat sleeping near a window, soft morning light" \
+  --prompt "A cozy cat eating an apple, warm illustration style, soft natural light, clean background" \
   --out ./output/cat.png
 ```
 
-By default, `--transport auto` tries `curl --http1.1` with browser-like headers first. If curl is unavailable, hits a network-level failure, or is blocked by the provider/WAF, it retries with Python transport.
-
-You can also choose the transport explicitly:
+Common parameters:
 
 ```bash
 python3 ./scripts/provider_imagegen.py generate \
-  --transport curl \
-  --prompt "A cozy cat sleeping near a window, soft morning light" \
-  --out ./output/cat-curl.png
+  --size 1024x1024 \
+  --quality high \
+  --prompt "A warm tea cup illustration" \
+  --out ./output/tea.png
 ```
 
-To preserve the old behavior and use only Python transport:
-
-```bash
-python3 ./scripts/provider_imagegen.py generate \
-  --transport python \
-  --prompt "A cozy cat sleeping near a window, soft morning light" \
-  --out ./output/cat-python.png
-```
-
-Generate through `/v1/responses` with `image_generation`:
-
-```bash
-python3 ./scripts/provider_imagegen.py responses \
-  --prompt "A cozy cat sleeping near a window, soft morning light" \
-  --out ./output/cat-responses.png
-```
-
-Use one or more reference images through `/v1/images/edits`:
+### Reference Image
 
 ```bash
 python3 ./scripts/provider_imagegen.py reference \
-  --image ./output/fixed-kitten.png \
-  --prompt "Use the cat in this image as reference and generate a warm illustration of it eating an apple" \
+  --image ./output/reference.png \
+  --prompt "Use the cat subject and overall style from this image, change it so the cat is eating a red apple, keep the background simple and clean" \
   --out ./output/cat-reference.png
 ```
 
-Use a reference image in `responses` mode:
-
-```bash
-python3 ./scripts/provider_imagegen.py responses \
-  --image ./output/fixed-kitten.png \
-  --prompt "Use this image as reference and generate a warm cat illustration" \
-  --out ./output/cat-reference-responses.png
-```
-
-## Writing Prompts For Reference Images
-
-When using reference images, say both what should stay the same and what should change. Avoid prompts like "use this image as reference" by itself; the provider may not know whether you care about the subject, composition, style, colors, or fine details.
-
-Recommended structure:
+For reference images, say both what to keep and what to change:
 
 ```text
 Use this image's {things to preserve} as reference, and generate {new scene}. Keep {subject/composition/style/colors/materials/expression}, change {parts to modify} into {target change}. Overall result: {style, mood, use case, aspect ratio}.
 ```
 
-Common example:
+### Responses Image Tool
 
-```text
-Use the cat subject, soft illustration style, and warm color palette from this image as reference. Generate an image of the cat eating a red apple. Keep the cat's visual identity and cozy mood, change the pose so it is holding the apple with both paws, keep the background simple and clean, square composition.
+```bash
+python3 ./scripts/provider_imagegen.py responses \
+  --prompt "A cozy cat eating an apple, warm illustration style, soft natural light, clean background" \
+  --out ./output/cat-responses.png
 ```
 
-If you care more about style than the original subject:
+You can also pass a reference image in `responses` mode:
 
-```text
-Use this image's lighting, brushwork, and color mood as reference. Do not preserve the original subject. Generate a warm illustration of a coffee cup beside a window, clean composition, soft natural light, suitable for a blog cover.
+```bash
+python3 ./scripts/provider_imagegen.py responses \
+  --image ./output/reference.png \
+  --prompt "Use this image as reference and generate a warm cat illustration" \
+  --out ./output/cat-reference-responses.png
 ```
 
-In Codex, you can write:
+### Transport
 
-```text
-Use $provider-image with output/reference.png as the reference image. Generate an image that preserves the subject shape and overall style, changes the scene to a nighttime desk setup, and saves it to output/imagegen/result.png.
+The default `--transport auto` tries `curl --http1.1` first, then falls back to Python transport.
+
+```bash
+python3 ./scripts/provider_imagegen.py generate \
+  --transport curl \
+  --prompt "A warm tea cup illustration" \
+  --out ./output/tea-curl.png
+```
+
+Use only Python transport when debugging the older path:
+
+```bash
+python3 ./scripts/provider_imagegen.py generate \
+  --transport python \
+  --prompt "A warm tea cup illustration" \
+  --out ./output/tea-python.png
 ```
 
 ## Use In Codex
@@ -217,12 +168,18 @@ Use $provider-image with output/reference.png as the reference image. Generate a
 Explicit invocation is the most reliable:
 
 ```text
-Use $provider-image to generate an image: a cozy cat sleeping near a window, save it to output/imagegen/cat.png
+Use $provider-image to generate an image: a cozy cat eating an apple, save it to output/imagegen/cat.png
+```
+
+With a reference image:
+
+```text
+Use $provider-image with output/reference.png as the reference image. Generate an image that preserves the subject shape and overall style, changes the scene to a nighttime desk setup, and saves it to output/imagegen/result.png.
 ```
 
 Automatic skill triggering is not guaranteed, so mention `$provider-image` when you want this provider path.
 
-## FAQ
+## Troubleshooting
 
 ### `Error: No bearer token found`
 
@@ -232,39 +189,23 @@ Check whether `~/.codex/auth.json` contains a usable `OPENAI_API_KEY`. If not, s
 
 Confirm that the provider supports the endpoint, your token has image-generation permission, and `base_url` points to the API root, such as `/v1`.
 
-If the response is `403` and contains `error code: 1010`, it is usually Cloudflare or provider-side policy blocking, not a broken skill install. The default `--transport auto` uses curl first; if both curl and Python fallback fail, run `inspect` or `diagnose`; if local config is correct, ask the provider administrator to allow image requests.
+If the response is `403` and contains `error code: 1010`, it is usually Cloudflare or provider-side policy blocking, not a broken skill install. The default `--transport auto` uses curl first; if both curl and Python fallback fail, run:
+
+```bash
+python3 ./scripts/provider_imagegen.py diagnose
+```
+
+If local config is correct, ask the provider administrator to allow image requests.
 
 ### `Curl transport failed; retrying with Python transport...`
 
 This is the expected fallback path. It means curl transport did not succeed, so the tool is trying Python transport. Use `--transport curl` to use only curl, or `--transport python` to use only the Python path while debugging.
-
-### `urllib` fails but `httpx` works under `--transport python`
-
-Some providers or edge layers behave differently across HTTP clients. If you need Python transport, installing `httpx` is recommended.
 
 ## Development
 
 ```bash
 python3 -m py_compile scripts/provider_imagegen.py scripts/install.py
 python3 -m unittest discover -s tests
-```
-
-## Project Layout
-
-```text
-provider-image/
-├── agents/
-├── assets/
-├── references/
-├── scripts/
-│   ├── install.py
-│   └── provider_imagegen.py
-├── tests/
-├── CONTRIBUTING.md
-├── LICENSE
-├── README.en.md
-├── README.md
-└── SKILL.md
 ```
 
 ## License
