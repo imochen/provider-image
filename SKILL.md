@@ -149,11 +149,11 @@ python3 ./scripts/provider_imagegen.py diagnose
 
 - Default image model is `gpt-image-2`.
 - Default Responses model comes from top-level `model` in `~/.codex/config.toml`.
-- `generate` and `responses` support `--transport auto|python|curl`; default `auto` first uses Python, then retries WAF-blocked JSON requests with curl.
-- `reference` mode requires `httpx`.
+- `generate`, `responses`, and `reference` support `--transport auto|python|curl`; default `auto` uses curl first, then Python fallback.
+- `reference` mode uses curl multipart by default; `--transport python` requires `httpx`.
 - If the user needs direct background transparency and the provider supports only legacy transparent behavior, treat that as a separate capability check.
 - If the provider returns a 4xx or 5xx, surface the status code and response body instead of silently retrying with different auth.
-- If the provider returns `403` with `error code: 1010`, treat that as provider-side or Cloudflare blocking rather than a broken local skill install when `inspect` or `diagnose` succeeds. In `auto` mode the script should retry JSON requests with curl; if that also fails, surface the provider-side block.
+- If the provider returns `403` with `error code: 1010`, treat that as provider-side or Cloudflare blocking rather than a broken local skill install when `inspect` or `diagnose` succeeds. In `auto` mode the script uses curl first and then Python fallback; if both fail, surface the provider-side block.
 
 ## Resources
 

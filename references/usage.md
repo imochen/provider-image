@@ -19,12 +19,12 @@ Provider resolution:
 2. Read `[model_providers.<name>]`
 3. Use that section's `base_url`
 
-JSON transport:
+Transport:
 
-- `--transport auto`: default for `generate` and `responses`; first try Python (`httpx` or `urllib`), then retry provider/WAF 403 blocks with curl
-- `--transport python`: use only the Python client path
-- `--transport curl`: use `curl --http1.1` with browser-like headers
-- `reference` mode is multipart and currently requires `httpx`
+- `--transport auto`: default for `generate`, `responses`, and `reference`; first try `curl --http1.1` with browser-like headers, then Python fallback
+- `--transport python`: use only the Python client path; JSON uses `httpx` or `urllib`, and `reference` requires `httpx`
+- `--transport curl`: use only `curl --http1.1` with browser-like headers
+- `reference` mode is multipart; curl is the default path, while Python transport uses `httpx`
 
 Common examples:
 

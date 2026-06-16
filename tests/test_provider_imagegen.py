@@ -101,19 +101,36 @@ class TransportTests(unittest.TestCase):
             )
         )
 
-    def test_auto_transport_falls_back_to_curl_for_waf_block(self):
-        python_error = provider_imagegen.ProviderHTTPError(
+    def test_auto_transport_uses_curl_first(self):
+        with mock.patch.object(
+            provider_imagegen, "_request_json_curl", return_value={"ok": True}
+        ) as curl_request:
+            with mock.patch.object(provider_imagegen, "_request_json_python") as python_request:
+                result = provider_imagegen._request_json(
+                    "https://provider.example/v1",
+                    "token",
+                    "POST",
+                    "/images/generations",
+                    {"prompt": "cat"},
+                )
+
+        self.assertEqual(result, {"ok": True})
+        curl_request.assert_called_once()
+        python_request.assert_not_called()
+
+    def test_auto_transport_falls_back_to_python_after_curl_block(self):
+        curl_error = provider_imagegen.ProviderHTTPError(
             "/images/generations",
             403,
             "error code: 1010",
-            {"Server": "cloudflare"},
+            {"transport": "curl"},
         )
         with mock.patch.object(
-            provider_imagegen, "_request_json_python", side_effect=python_error
-        ) as python_request:
+            provider_imagegen, "_request_json_curl", side_effect=curl_error
+        ) as curl_request:
             with mock.patch.object(
-                provider_imagegen, "_request_json_curl", return_value={"ok": True}
-            ) as curl_request:
+                provider_imagegen, "_request_json_python", return_value={"ok": True}
+            ) as python_request:
                 with redirect_stderr(io.StringIO()) as stderr:
                     result = provider_imagegen._request_json(
                         "https://provider.example/v1",
@@ -124,11 +141,101 @@ class TransportTests(unittest.TestCase):
                     )
 
         self.assertEqual(result, {"ok": True})
-        python_request.assert_called_once()
         curl_request.assert_called_once()
-        self.assertIn("retrying with curl transport", stderr.getvalue())
+        python_request.assert_called_once()
+        self.assertIn("retrying with Python transport", stderr.getvalue())
 
-    def test_python_transport_does_not_fallback(self):
+    def test_auto_transport_falls_back_to_python_when_curl_missing(self):
+        curl_error = provider_imagegen.ProviderTransportError("curl missing")
+        with mock.patch.object(
+            provider_imagegen, "_request_json_curl", side_effect=curl_error
+        ) as curl_request:
+            with mock.patch.object(
+                provider_imagegen, "_request_json_python", return_value={"ok": True}
+            ) as python_request:
+                with redirect_stderr(io.StringIO()):
+                    result = provider_imagegen._request_json(
+                        "https://provider.example/v1",
+                        "token",
+                        "POST",
+                        "/images/generations",
+                        {"prompt": "cat"},
+                    )
+
+        self.assertEqual(result, {"ok": True})
+        curl_request.assert_called_once()
+        python_request.assert_called_once()
+
+    def test_curl_transport_does_not_fallback(self):
+        curl_error = provider_imagegen.ProviderHTTPError(
+            "/images/generations",
+            403,
+            "error code: 1010",
+            {"transport": "curl"},
+        )
+        with mock.patch.object(provider_imagegen, "_request_json_curl", side_effect=curl_error):
+            with mock.patch.object(provider_imagegen, "_request_json_python") as python_request:
+                with redirect_stderr(io.StringIO()):
+                    with self.assertRaises(SystemExit):
+                        provider_imagegen._request_json(
+                            "https://provider.example/v1",
+                            "token",
+                            "POST",
+                            "/images/generations",
+                            {"prompt": "cat"},
+                            transport="curl",
+                        )
+
+        python_request.assert_not_called()
+
+    def test_auto_transport_reports_both_failures(self):
+        curl_error = provider_imagegen.ProviderHTTPError(
+            "/images/generations",
+            403,
+            "curl block",
+            {"transport": "curl"},
+        )
+        python_error = provider_imagegen.ProviderHTTPError(
+            "/images/generations",
+            403,
+            "error code: 1010",
+            {"Server": "cloudflare"},
+        )
+        with mock.patch.object(provider_imagegen, "_request_json_curl", side_effect=curl_error):
+            with mock.patch.object(
+                provider_imagegen, "_request_json_python", side_effect=python_error
+            ):
+                with redirect_stderr(io.StringIO()) as stderr:
+                    with self.assertRaises(SystemExit):
+                        provider_imagegen._request_json(
+                            "https://provider.example/v1",
+                            "token",
+                            "POST",
+                            "/images/generations",
+                            {"prompt": "cat"},
+                        )
+
+        self.assertIn("Python fallback also failed", stderr.getvalue())
+
+    def test_python_transport_uses_only_python_path(self):
+        with mock.patch.object(
+            provider_imagegen, "_request_json_python", return_value={"ok": True}
+        ) as python_request:
+            with mock.patch.object(provider_imagegen, "_request_json_curl") as curl_request:
+                result = provider_imagegen._request_json(
+                    "https://provider.example/v1",
+                    "token",
+                    "POST",
+                    "/images/generations",
+                    {"prompt": "cat"},
+                    transport="python",
+                )
+
+        self.assertEqual(result, {"ok": True})
+        python_request.assert_called_once()
+        curl_request.assert_not_called()
+
+    def test_python_transport_does_not_fallback_to_curl(self):
         python_error = provider_imagegen.ProviderHTTPError(
             "/images/generations",
             403,
@@ -148,29 +255,6 @@ class TransportTests(unittest.TestCase):
                             "/images/generations",
                             {"prompt": "cat"},
                             transport="python",
-                        )
-
-        curl_request.assert_not_called()
-
-    def test_non_waf_error_does_not_fallback(self):
-        python_error = provider_imagegen.ProviderHTTPError(
-            "/images/generations",
-            401,
-            "invalid token",
-            {},
-        )
-        with mock.patch.object(
-            provider_imagegen, "_request_json_python", side_effect=python_error
-        ):
-            with mock.patch.object(provider_imagegen, "_request_json_curl") as curl_request:
-                with redirect_stderr(io.StringIO()):
-                    with self.assertRaises(SystemExit):
-                        provider_imagegen._request_json(
-                            "https://provider.example/v1",
-                            "token",
-                            "POST",
-                            "/images/generations",
-                            {"prompt": "cat"},
                         )
 
         curl_request.assert_not_called()
@@ -204,6 +288,69 @@ class TransportTests(unittest.TestCase):
                 )
 
         self.assertEqual(result, {"ok": True})
+
+    def test_reference_curl_transport_uses_multipart_without_json_content_type(self):
+        class CurlResult:
+            returncode = 0
+            stdout = "200"
+            stderr = ""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            image_path = Path(tmp) / "cat.png"
+            image_path.write_bytes(b"image")
+
+            def fake_run(args, **_kwargs):
+                self.assertNotIn("secret-token", " ".join(args))
+                config_path = Path(args[-1])
+                config_text = config_path.read_text(encoding="utf-8")
+                self.assertIn("Authorization: Bearer secret-token", config_text)
+                self.assertNotIn("Content-Type: application/json", config_text)
+                self.assertIn('form-string = "prompt=cat \\"hero\\" = warm"', config_text)
+                self.assertIn("form = \"image[]=@", config_text)
+                output_line = next(
+                    line for line in config_text.splitlines() if line.startswith("output = ")
+                )
+                body_path = Path(output_line.split('"', 2)[1])
+                body_path.write_text(json.dumps({"ok": True}), encoding="utf-8")
+                return CurlResult()
+
+            with mock.patch.object(provider_imagegen.shutil, "which", return_value="/usr/bin/curl"):
+                with mock.patch.object(provider_imagegen.subprocess, "run", side_effect=fake_run):
+                    result = provider_imagegen._request_multipart_curl(
+                        "https://provider.example/v1",
+                        "secret-token",
+                        "/images/edits",
+                        {"prompt": 'cat "hero" = warm'},
+                        [image_path],
+                    )
+
+        self.assertEqual(result, {"ok": True})
+
+    def test_reference_auto_transport_falls_back_to_python_after_curl_failure(self):
+        curl_error = provider_imagegen.ProviderHTTPError(
+            "/images/edits",
+            403,
+            "curl block",
+            {"transport": "curl"},
+        )
+        with mock.patch.object(
+            provider_imagegen, "_request_multipart_curl", side_effect=curl_error
+        ) as curl_request:
+            with mock.patch.object(
+                provider_imagegen, "_request_multipart_httpx", return_value={"ok": True}
+            ) as python_request:
+                with redirect_stderr(io.StringIO()):
+                    result = provider_imagegen._request_multipart(
+                        "https://provider.example/v1",
+                        "token",
+                        "/images/edits",
+                        {"prompt": "cat"},
+                        [Path("cat.png")],
+                    )
+
+        self.assertEqual(result, {"ok": True})
+        curl_request.assert_called_once()
+        python_request.assert_called_once()
 
 
 class FileWriteTests(unittest.TestCase):

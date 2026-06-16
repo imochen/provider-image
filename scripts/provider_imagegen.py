@@ -42,6 +42,10 @@ class ProviderHTTPError(Exception):
         super().__init__(_format_http_error(path, status, body, headers))
 
 
+class ProviderTransportError(Exception):
+    pass
+
+
 def _die(message: str, code: int = 1) -> None:
     print(f"Error: {message}", file=sys.stderr)
     raise SystemExit(code)
@@ -186,22 +190,28 @@ def _request_json(
     transport: str = "auto",
 ) -> Dict[str, Any]:
     if transport == "curl":
-        return _request_json_curl(base_url, token, method, path, payload)
-    try:
-        return _request_json_python(base_url, token, method, path, payload)
-    except ProviderHTTPError as exc:
-        if transport == "auto" and _is_provider_waf_block(exc.status, exc.body, exc.headers):
+        try:
+            return _request_json_curl(base_url, token, method, path, payload)
+        except (ProviderHTTPError, ProviderTransportError) as exc:
+            _die(str(exc))
+    if transport == "auto":
+        try:
+            return _request_json_curl(base_url, token, method, path, payload)
+        except (ProviderHTTPError, ProviderTransportError) as curl_exc:
             print(
-                "Python transport was blocked by provider/WAF; retrying with curl transport...",
+                "Curl transport failed; retrying with Python transport...",
                 file=sys.stderr,
             )
             try:
-                return _request_json_curl(base_url, token, method, path, payload)
-            except ProviderHTTPError as curl_exc:
+                return _request_json_python(base_url, token, method, path, payload)
+            except ProviderHTTPError as python_exc:
                 _die(
-                    f"Curl transport also failed after Python transport was blocked. {curl_exc} "
-                    "Ask the provider administrator to allow image requests for this base_url, token, and client."
+                    f"Curl transport failed, and Python fallback also failed. "
+                    f"Curl: {curl_exc} Python: {python_exc}"
                 )
+    try:
+        return _request_json_python(base_url, token, method, path, payload)
+    except ProviderHTTPError as exc:
         _die(str(exc))
     return {}
 
@@ -272,7 +282,7 @@ def _request_multipart_httpx(
                 pass
 
     if response.status_code >= 400:
-        _die(_format_http_error(path, response.status_code, response.text, dict(response.headers)))
+        raise ProviderHTTPError(path, response.status_code, response.text, dict(response.headers))
     try:
         return response.json()
     except Exception as exc:
@@ -313,7 +323,24 @@ def _request_json_urllib(
 
 
 def _curl_config_quote(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"')
+    return (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\r", "\\r")
+        .replace("\n", "\\n")
+        .replace("\t", "\\t")
+    )
+
+
+def _curl_browser_headers(*, json_content_type: bool) -> Dict[str, str]:
+    headers = dict(CURL_BROWSER_HEADERS)
+    if not json_content_type:
+        headers.pop("Content-Type", None)
+    return headers
+
+
+def _curl_form_string(name: str, value: str) -> str:
+    return f"{_curl_config_quote(name)}={_curl_config_quote(value)}"
 
 
 def _write_private_text(path: Path, text: str) -> None:
@@ -328,7 +355,7 @@ def _request_json_curl(
 ) -> Dict[str, Any]:
     curl_path = shutil.which("curl")
     if not curl_path:
-        _die("Curl transport requested but `curl` was not found on PATH.")
+        raise ProviderTransportError("Curl transport requested but `curl` was not found on PATH.")
 
     url = f"{base_url}{path}"
     with tempfile.TemporaryDirectory(prefix="provider-image-curl-") as tmp:
@@ -354,7 +381,7 @@ def _request_json_curl(
             'write-out = "%{http_code}"',
             f'header = "Authorization: Bearer {_curl_config_quote(token)}"',
         ]
-        for name, value in CURL_BROWSER_HEADERS.items():
+        for name, value in _curl_browser_headers(json_content_type=True).items():
             config_lines.append(f'header = "{name}: {_curl_config_quote(value)}"')
         config_lines.append(f'data-binary = "@{_curl_config_quote(str(payload_path))}"')
         _write_private_text(config_path, "\n".join(config_lines) + "\n")
@@ -368,7 +395,9 @@ def _request_json_curl(
                 check=False,
             )
         except subprocess.TimeoutExpired:
-            _die(f"Network error while calling {path} with curl transport: request timed out")
+            raise ProviderTransportError(
+                f"Network error while calling {path} with curl transport: request timed out"
+            )
 
         status_text = result.stdout.strip()
         try:
@@ -381,7 +410,7 @@ def _request_json_curl(
             body = body_path.read_text(encoding="utf-8", errors="replace")
 
         if result.returncode != 0 and status == 0:
-            _die(
+            raise ProviderTransportError(
                 f"Network error while calling {path} with curl transport: "
                 f"{result.stderr.strip() or 'curl exited unsuccessfully'}"
             )
@@ -391,6 +420,123 @@ def _request_json_curl(
             return json.loads(body)
         except Exception as exc:
             _die(f"Failed to decode JSON from {path} with curl transport: {exc}")
+    return {}
+
+
+def _request_multipart_curl(
+    base_url: str,
+    token: str,
+    path: str,
+    data: Dict[str, Any],
+    image_paths: List[Path],
+) -> Dict[str, Any]:
+    curl_path = shutil.which("curl")
+    if not curl_path:
+        raise ProviderTransportError("Curl transport requested but `curl` was not found on PATH.")
+
+    url = f"{base_url}{path}"
+    with tempfile.TemporaryDirectory(prefix="provider-image-curl-") as tmp:
+        tmp_path = Path(tmp)
+        body_path = tmp_path / "response.json"
+        config_path = tmp_path / "curl.conf"
+
+        config_lines = [
+            f'url = "{_curl_config_quote(url)}"',
+            'request = "POST"',
+            "http1.1",
+            "silent",
+            "show-error",
+            "location",
+            "compressed",
+            "max-time = 180",
+            f'output = "{_curl_config_quote(str(body_path))}"',
+            'write-out = "%{http_code}"',
+            f'header = "Authorization: Bearer {_curl_config_quote(token)}"',
+        ]
+        for name, value in _curl_browser_headers(json_content_type=False).items():
+            config_lines.append(f'header = "{name}: {_curl_config_quote(value)}"')
+        for name, value in data.items():
+            config_lines.append(f'form-string = "{_curl_form_string(str(name), str(value))}"')
+        for image_path in image_paths:
+            mime = mimetypes.guess_type(image_path.name)[0] or "application/octet-stream"
+            form_value = (
+                f"image[]=@{image_path};"
+                f"type={mime};"
+                f"filename={image_path.name}"
+            )
+            config_lines.append(f'form = "{_curl_config_quote(form_value)}"')
+        _write_private_text(config_path, "\n".join(config_lines) + "\n")
+
+        try:
+            result = subprocess.run(
+                [curl_path, "--config", str(config_path)],
+                capture_output=True,
+                text=True,
+                timeout=190,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            raise ProviderTransportError(
+                f"Network error while calling {path} with curl transport: request timed out"
+            )
+
+        status_text = result.stdout.strip()
+        try:
+            status = int(status_text[-3:])
+        except ValueError:
+            status = 0
+
+        body = ""
+        if body_path.exists():
+            body = body_path.read_text(encoding="utf-8", errors="replace")
+
+        if result.returncode != 0 and status == 0:
+            raise ProviderTransportError(
+                f"Network error while calling {path} with curl transport: "
+                f"{result.stderr.strip() or 'curl exited unsuccessfully'}"
+            )
+        if status >= 400 or result.returncode != 0:
+            raise ProviderHTTPError(path, status, body or result.stderr, {"transport": "curl"})
+        try:
+            return json.loads(body)
+        except Exception as exc:
+            _die(f"Failed to decode JSON from {path} with curl transport: {exc}")
+    return {}
+
+
+def _request_multipart(
+    base_url: str,
+    token: str,
+    path: str,
+    data: Dict[str, Any],
+    image_paths: List[Path],
+    *,
+    transport: str = "auto",
+) -> Dict[str, Any]:
+    if transport == "curl":
+        try:
+            return _request_multipart_curl(base_url, token, path, data, image_paths)
+        except (ProviderHTTPError, ProviderTransportError) as exc:
+            _die(str(exc))
+    if transport == "auto":
+        try:
+            return _request_multipart_curl(base_url, token, path, data, image_paths)
+        except (ProviderHTTPError, ProviderTransportError) as curl_exc:
+            print(
+                "Curl transport failed; retrying with Python transport...",
+                file=sys.stderr,
+            )
+            try:
+                return _request_multipart_httpx(base_url, token, path, data, image_paths)
+            except ProviderHTTPError as python_exc:
+                _die(
+                    f"Curl transport failed, and Python fallback also failed. "
+                    f"Curl: {curl_exc} Python: {python_exc}"
+                )
+    try:
+        return _request_multipart_httpx(base_url, token, path, data, image_paths)
+    except ProviderHTTPError as exc:
+        _die(str(exc))
     return {}
 
 
@@ -412,8 +558,9 @@ def _cmd_diagnose(_: argparse.Namespace, resolved: Dict[str, Any]) -> int:
     print("diagnose_status=inspect_ok")
     print("next_step=try_generate_or_responses")
     print("transport_default=auto")
-    print("if_python_transport_blocked=auto_retries_with_curl_transport")
-    print("if_curl_transport_also_fails=provider_side_block_or_permission_problem")
+    print("transport_auto=curl_first_python_fallback")
+    print("if_both_transports_fail=provider_side_block_or_permission_problem")
+    print("python_transport=available_for_debugging_with_--transport_python")
     return 0
 
 
@@ -446,7 +593,7 @@ def _cmd_generate(args: argparse.Namespace, resolved: Dict[str, Any]) -> int:
 
 
 def _cmd_reference(args: argparse.Namespace, resolved: Dict[str, Any]) -> int:
-    if importlib.util.find_spec("httpx") is None:
+    if args.transport == "python" and importlib.util.find_spec("httpx") is None:
         _die("Reference-image mode requires `httpx`. Run `python -m pip install httpx`.")
 
     image_paths = _read_image_paths(args.image)
@@ -459,12 +606,13 @@ def _cmd_reference(args: argparse.Namespace, resolved: Dict[str, Any]) -> int:
     if args.output_format:
         form["output_format"] = args.output_format
 
-    data = _request_multipart_httpx(
+    data = _request_multipart(
         resolved["base_url"],
         resolved["token"],
         "/images/edits",
         form,
         image_paths,
+        transport=args.transport,
     )
     try:
         image_b64 = data["data"][0]["b64_json"]
@@ -535,7 +683,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--transport",
         choices=("auto", "python", "curl"),
         default="auto",
-        help="JSON request transport. auto retries WAF-blocked Python requests with curl.",
+        help="JSON request transport. Default: auto uses curl first, then Python fallback.",
     )
     gen_parser.add_argument("--force", action="store_true")
     gen_parser.set_defaults(handler=_cmd_generate)
@@ -551,6 +699,12 @@ def _build_parser() -> argparse.ArgumentParser:
     ref_parser.add_argument("--size", default="1024x1024")
     ref_parser.add_argument("--quality", default="low")
     ref_parser.add_argument("--output-format")
+    ref_parser.add_argument(
+        "--transport",
+        choices=("auto", "python", "curl"),
+        default="auto",
+        help="Multipart request transport. Default: auto uses curl first, then Python fallback.",
+    )
     ref_parser.add_argument("--force", action="store_true")
     ref_parser.set_defaults(handler=_cmd_reference)
 
@@ -565,7 +719,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--transport",
         choices=("auto", "python", "curl"),
         default="auto",
-        help="JSON request transport. auto retries WAF-blocked Python requests with curl.",
+        help="JSON request transport. Default: auto uses curl first, then Python fallback.",
     )
     resp_parser.add_argument("--force", action="store_true")
     resp_parser.set_defaults(handler=_cmd_responses)

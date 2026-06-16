@@ -30,8 +30,8 @@ Use it only when you intentionally want image requests to go through your custom
 - Supports `/v1/images/generations`
 - Supports `/v1/images/edits` for reference-image workflows
 - Supports `/v1/responses` with `image_generation`
-- Prefers `httpx`; plain JSON requests can fall back to Python's standard library
-- Supports a `curl --http1.1` fallback for providers whose Cloudflare/WAF rules block Python clients
+- Prefers `curl --http1.1` with browser-like headers for better provider/WAF compatibility
+- Supports Python transport fallback: JSON uses `httpx` or `urllib`, reference-image mode uses `httpx`
 - Works as both a standalone script and a Codex skill
 
 ## Install
@@ -77,7 +77,7 @@ Python 3.11+ is recommended:
 python3 -m pip install -r requirements.txt
 ```
 
-At minimum, install `httpx` for the most compatible request path:
+If you want to use Python transport or run development tests, install at least:
 
 ```bash
 python3 -m pip install httpx
@@ -138,7 +138,7 @@ python3 ./scripts/provider_imagegen.py generate \
   --out ./output/cat.png
 ```
 
-By default, `--transport auto` tries the Python client first, meaning `httpx` or `urllib`. If the provider/WAF returns `403`, Cloudflare, `1010`, or `Your request was blocked`, it retries with `curl --http1.1` and browser-like headers.
+By default, `--transport auto` tries `curl --http1.1` with browser-like headers first. If curl is unavailable, hits a network-level failure, or is blocked by the provider/WAF, it retries with Python transport.
 
 You can also choose the transport explicitly:
 
@@ -149,7 +149,7 @@ python3 ./scripts/provider_imagegen.py generate \
   --out ./output/cat-curl.png
 ```
 
-To preserve the old behavior and disable fallback:
+To preserve the old behavior and use only Python transport:
 
 ```bash
 python3 ./scripts/provider_imagegen.py generate \
@@ -232,15 +232,15 @@ Check whether `~/.codex/auth.json` contains a usable `OPENAI_API_KEY`. If not, s
 
 Confirm that the provider supports the endpoint, your token has image-generation permission, and `base_url` points to the API root, such as `/v1`.
 
-If the response is `403` and contains `error code: 1010`, it is usually Cloudflare or provider-side policy blocking, not a broken skill install. The default `--transport auto` retries with the curl fallback. If curl also fails, run `inspect` or `diagnose`; if local config is correct, ask the provider administrator to allow image requests.
+If the response is `403` and contains `error code: 1010`, it is usually Cloudflare or provider-side policy blocking, not a broken skill install. The default `--transport auto` uses curl first; if both curl and Python fallback fail, run `inspect` or `diagnose`; if local config is correct, ask the provider administrator to allow image requests.
 
-### `Python transport was blocked by provider/WAF; retrying with curl transport...`
+### `Curl transport failed; retrying with Python transport...`
 
-This is the expected fallback path. It means the Python HTTP client was blocked by the provider/WAF, so the tool is retrying with `curl --http1.1` and browser-like headers. Use `--transport curl` to go directly through curl, or `--transport python` to disable fallback while debugging the old path.
+This is the expected fallback path. It means curl transport did not succeed, so the tool is trying Python transport. Use `--transport curl` to use only curl, or `--transport python` to use only the Python path while debugging.
 
-### `urllib` fails but `httpx` works
+### `urllib` fails but `httpx` works under `--transport python`
 
-Some providers or edge layers behave differently across HTTP clients. Installing `httpx` is recommended.
+Some providers or edge layers behave differently across HTTP clients. If you need Python transport, installing `httpx` is recommended.
 
 ## Development
 
